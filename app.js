@@ -88,7 +88,7 @@ const PICKUP_SPAWNS = [
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const ri = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const rc = (a,b)=>Math.random()*(b-a)+a;
-const lp = (a,b,t)=>a+(b-a)*t;
+const lerp = (a,b,t)=>a+(b-a)*t;
 const cl = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 
 // ─── Audio ───────────────────────────────────────────────────────────────────
@@ -119,16 +119,17 @@ function mkOsc(freq, type, start, dur, vol) {
 
 function mkNoise(start, dur, vol, lpFreq) {
   if (!AC) return;
+  const lf = lpFreq || 800;
   const len = Math.ceil(AC.sampleRate * dur);
   const buf = AC.createBuffer(1, len, AC.sampleRate);
   const d = buf.getChannelData(0);
   for (let i=0;i<len;i++) d[i]=Math.random()*2-1;
   const src = AC.createBufferSource(); src.buffer = buf;
-  const f = AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lpFreq||800;
+  const flt = AC.createBiquadFilter(); flt.type='lowpass'; flt.frequency.value=lf;
   const g = AC.createGain();
   g.gain.setValueAtTime(vol, start);
   g.gain.exponentialRampToValueAtTime(0.001, start+dur);
-  src.connect(f); f.connect(g); g.connect(sfxBus);
+  src.connect(flt); flt.connect(g); g.connect(sfxBus);
   src.start(start); src.stop(start+dur+0.05);
 }
 
@@ -209,9 +210,9 @@ function startBattleMusic() {
     if(beat%2===0){
       const f=MINOR[ri(0,3)]/2;
       const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
-      const lp2=AC.createBiquadFilter(); lp2.type='lowpass'; lp2.frequency.value=300;
+      const flt=AC.createBiquadFilter(); flt.type='lowpass'; flt.frequency.value=300;
       const g=AC.createGain(); g.gain.setValueAtTime(0.12,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
-      o.connect(lp2); lp2.connect(g); g.connect(musicBus); o.start(t); o.stop(t+0.3);
+      o.connect(flt); flt.connect(g); g.connect(musicBus); o.start(t); o.stop(t+0.3);
     }
     if(beat%8===0 && Math.random()<0.7){
       const seq=[MINOR[ri(4,7)],MINOR[ri(2,5)],MINOR[ri(0,3)]];
@@ -288,7 +289,6 @@ function tileToWorld(col,row){
 }
 
 function buildTerrain(){
-  // Vertex-coloured geometry (new technique — organic look without textures)
   const geo=new THREE.BufferGeometry();
   const verts=[],colours=[];
   tileGrid=[];
@@ -337,14 +337,18 @@ function buildCapy(){
   const mat=new THREE.MeshLambertMaterial({color:0x8B6340});
   const noseMat=new THREE.MeshLambertMaterial({color:0x5a3a1a});
   const root=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.55,1.1),mat); body.position.y=0.5; root.add(body);
-  const head=new THREE.Mesh(new THREE.BoxGeometry(0.65,0.5,0.55),mat); head.position.set(0,0.82,0.45); root.add(head);
-  root.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.3,0.18,0.2),noseMat),{position:new THREE.Vector3(0,0.78,0.72)}));
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.55,1.1),mat);
+  body.position.set(0,0.5,0); root.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.65,0.5,0.55),mat);
+  head.position.set(0,0.82,0.45); root.add(head);
+  const nose=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.18,0.2),noseMat);
+  nose.position.set(0,0.78,0.72); root.add(nose);
   const earG=new THREE.CylinderGeometry(0.1,0.12,0.25,5);
-  [[-0.25,1.08,0.4],[0.25,1.08,0.4]].forEach(([ex,ey,ez])=>{const e=new THREE.Mesh(earG,mat);e.position.set(ex,ey,ez);root.add(e);});
+  const earL=new THREE.Mesh(earG,mat); earL.position.set(-0.25,1.08,0.4); root.add(earL);
+  const earR=new THREE.Mesh(earG,mat); earR.position.set(0.25,1.08,0.4); root.add(earR);
   const legG=new THREE.BoxGeometry(0.22,0.38,0.22);
   [[-0.28,0.19,-0.28],[-0.28,0.19,0.28],[0.28,0.19,-0.28],[0.28,0.19,0.28]].forEach(([lx,ly,lz])=>{
-    const l=new THREE.Mesh(legG,mat);l.position.set(lx,ly,lz);root.add(l);
+    const l=new THREE.Mesh(legG,mat); l.position.set(lx,ly,lz); root.add(l);
   });
   capyMesh=root; scene.add(root);
 }
@@ -354,22 +358,24 @@ function buildEnemyMesh(edef,id){
   const bm=new THREE.MeshLambertMaterial({color:edef.color});
   const em=new THREE.MeshLambertMaterial({color:0xff2222});
   if(edef.boss){
-    const b=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.5,2.0),bm); b.position.y=0.35; g.add(b);
+    const b=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.5,2.0),bm); b.position.set(0,0.35,0); g.add(b);
     const h=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.35,0.8),bm); h.position.set(0,0.38,1.1); g.add(h);
     const tail=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.3,0.9),bm); tail.position.set(0,0.3,-1.1); g.add(tail);
   } else {
-    const b=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.55,0.7),bm); b.position.y=0.38; g.add(b);
+    const b=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.55,0.7),bm); b.position.set(0,0.38,0); g.add(b);
     const h=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.35,0.4),bm); h.position.set(0,0.72,0.35); g.add(h);
   }
-  const eL=new THREE.Mesh(new THREE.SphereGeometry(0.06,4,4),em); eL.position.set(-0.16,0.78,0.52);
-  const eR=eL.clone(); eR.position.set(0.16,0.78,0.52);
+  const eL=new THREE.Mesh(new THREE.SphereGeometry(0.06,4,4),em);
+  eL.position.set(-0.16,0.78,0.52);
+  const eR=new THREE.Mesh(new THREE.SphereGeometry(0.06,4,4),em);
+  eR.position.set(0.16,0.78,0.52);
   g.add(eL); g.add(eR); enemyMeshes[id]=g; scene.add(g); return g;
 }
 
 function buildNpcMesh(npc){
   const g=new THREE.Group();
   const bm=new THREE.MeshLambertMaterial({color:npc.isShop?0xd4a02a:0x7a5c30});
-  const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.55,0.9),bm); b.position.y=0.48; g.add(b);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.55,0.9),bm); b.position.set(0,0.48,0); g.add(b);
   const h=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.45,0.5),bm); h.position.set(0,0.82,0.3); g.add(h);
   if(npc.isShop){
     const hat=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.3,0.3,6),new THREE.MeshLambertMaterial({color:0xdd9900}));
@@ -681,7 +687,7 @@ function updateEnemies(dt){
       }
       e.wander=e.boss?3:rc(1.2,2.8);
     }
-    if(e.mesh)e.mesh.position.y=Math.sin(frame*0.04+e.id)*0.06;
+    if(e.mesh) e.mesh.position.y=Math.sin(frame*0.04+e.id)*0.06;
   });
 }
 
@@ -700,7 +706,7 @@ function loop(ts){
       if(moved){moveTimer=MOVE_INTERVAL;checkInteractions();}
     }
     const{x:wx,z:wz}=tileToWorld(px,py);
-    lerpPx=lp(lerpPx,wx,0.18);lerpPz=lp(lerpPz,wz,0.18);
+    lerpPx=lerp(lerpPx,wx,0.18);lerpPz=lerp(lerpPz,wz,0.18);
     capyMesh.position.set(lerpPx,0,lerpPz);
     capyMesh.children[0].position.y=0.5+Math.sin(frame*0.12)*0.04;
     if(dirBtns.up)capyMesh.rotation.y=0;
