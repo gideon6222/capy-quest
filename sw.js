@@ -1,4 +1,4 @@
-const CACHE = 'capy-quest-v1';
+const CACHE = 'capy-quest-v2';
 const ASSETS = [
   './',
   './index.html',
