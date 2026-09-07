@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#1a3a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Capy Quest</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --ink:#e8f4d0;--dim:#7a9a60;--panel:#0d1f08;--line:#1e3a10;
+  --green:#4be08a;--amber:#ffc861;--red:#ff5c6b;--cyan:#3fe0ff;--hp:#44dd66;
+  --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a3a0a;color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none;}
+#game{position:fixed;inset:0;}
+canvas{display:block;}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;pointer-events:none;
+  padding:calc(var(--safe-t) + 8px) 12px 0;z-index:10;}
+.hud-row{display:flex;gap:8px;align-items:center;}
+.chip{background:rgba(8,20,4,.72);border:1px solid var(--line);border-radius:8px;
+  padding:4px 10px;font-size:13px;font-weight:700;backdrop-filter:blur(4px);}
+#hudZone{font-size:11px;color:var(--dim);text-align:center;margin-top:3px;
+  text-shadow:0 1px 3px #000;letter-spacing:.06em;}
+.bar-wrap{position:relative;height:16px;border-radius:5px;overflow:hidden;flex:1;
+  background:rgba(8,20,4,.72);border:1px solid var(--line);}
+.bar-fill{position:absolute;inset:0 auto 0 0;width:100%;}
+.bar-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;letter-spacing:.1em;text-shadow:0 1px 2px #000;}
+#hudHPBar{background:linear-gradient(90deg,#1a6630,var(--hp));}
+#xpBar{background:linear-gradient(90deg,#3a2a80,#8060ff);}
+#toast{position:fixed;left:0;right:0;top:28%;text-align:center;font-size:15px;font-weight:800;
+  color:var(--amber);opacity:0;transition:opacity .35s;text-shadow:0 2px 8px #000;
+  pointer-events:none;z-index:50;}
+
+/* Controls */
+#ctrl{position:fixed;left:0;right:0;bottom:calc(var(--safe-b) + 10px);
+  display:flex;align-items:flex-end;justify-content:space-between;padding:0 14px;z-index:10;}
+#dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,58px);gap:4px;}
+.dkey{border:1px solid var(--line);background:rgba(10,25,6,.82);color:var(--ink);
+  border-radius:12px;font-size:22px;line-height:1;touch-action:none;
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+.dkey:active{background:rgba(75,224,138,.25);border-color:var(--green);}
+#dir-up{grid-area:1/2;}#dir-left{grid-area:2/1;}#dir-right{grid-area:2/3;}#dir-down{grid-area:3/2;}
+#actionBtns{display:flex;flex-direction:column;gap:8px;}
+.actBtn{border:1px solid var(--line);background:rgba(10,25,6,.82);color:var(--ink);
+  border-radius:11px;padding:13px 14px;font-size:12px;font-weight:700;letter-spacing:.08em;
+  backdrop-filter:blur(6px);white-space:nowrap;}
+#interactBtn{border-color:#2f6f52;color:var(--green);}
+
+/* Battle overlay */
+#battle{position:fixed;inset:0;background:rgba(5,12,2,.93);z-index:20;
+  display:flex;flex-direction:column;justify-content:space-between;padding:12px;
+  padding-top:calc(var(--safe-t)+12px);padding-bottom:calc(var(--safe-b)+12px);}
+#battle.hidden{display:none;}
+.bt-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;}
+.bt-name{font-size:15px;font-weight:800;letter-spacing:.05em;margin-bottom:6px;}
+.bt-hprow{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.bt-hp-text{font-size:11px;color:var(--dim);white-space:nowrap;}
+.bt-bar{flex:1;height:14px;border-radius:5px;background:rgba(0,0,0,.5);overflow:hidden;}
+.bt-bar-fill{height:100%;width:100%;border-radius:5px;transition:width .2s;}
+#btEnemyHPBar{background:linear-gradient(90deg,#7a1a1a,var(--red));}
+#btCapyHPBar{background:linear-gradient(90deg,#1a6630,var(--hp));}
+#btLog{font-size:12px;line-height:1.6;color:var(--ink);min-height:60px;white-space:pre-line;
+  border-top:1px solid var(--line);margin-top:8px;padding-top:8px;}
+#btActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+.btBtn{border:1px solid var(--line);background:rgba(20,40,14,.9);color:var(--ink);
+  border-radius:10px;padding:12px 8px;font-size:12px;font-weight:700;letter-spacing:.04em;}
+.btBtn:active{background:rgba(75,224,138,.2);border-color:var(--green);}
+
+/* Dialog */
+#dialogBox{position:fixed;inset:0;background:rgba(5,12,2,.88);z-index:30;
+  display:flex;align-items:flex-end;padding:16px;padding-bottom:calc(var(--safe-b)+16px);}
+#dialogBox.hidden{display:none;}
+.dialog-sheet{width:100%;background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:16px;}
+.dialog-name{font-size:13px;color:var(--amber);font-weight:800;margin-bottom:6px;letter-spacing:.06em;}
+#dialogText{font-size:14px;line-height:1.6;color:var(--ink);margin-bottom:14px;}
+.dialog-btn{width:100%;border:1px solid #2f6f52;background:rgba(75,224,138,.12);
+  color:var(--green);border-radius:9px;padding:12px;font-size:13px;font-weight:700;}
+
+/* Shop */
+#shopModal{position:fixed;inset:0;background:rgba(5,12,2,.9);z-index:30;
+  display:flex;align-items:center;justify-content:center;padding:18px;}
+#shopModal.hidden{display:none;}
+.shop-sheet{width:100%;max-width:420px;max-height:85vh;overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;}
+.shop-sheet h2{margin:0 0 4px;font-size:18px;letter-spacing:.06em;}
+.shop-gold{color:var(--amber);font-size:13px;font-weight:700;margin-bottom:14px;}
+.shopRow{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line);}
+.shopRow>div{flex:1;font-size:13px;}
+.shopBtn{border:1px solid #2f6f52;background:rgba(75,224,138,.12);color:var(--green);
+  border-radius:8px;padding:9px 11px;font-size:12px;font-weight:700;}
+.wide-btn{width:100%;margin-top:14px;border:1px solid var(--line);background:rgba(63,224,255,.1);
+  color:var(--cyan);border-radius:10px;padding:13px;font-size:13px;font-weight:700;letter-spacing:.08em;}
+
+/* Level up */
+#levelUp{position:fixed;inset:0;background:rgba(5,12,2,.92);z-index:35;
+  display:flex;align-items:center;justify-content:center;padding:20px;}
+#levelUp.hidden{display:none;}
+.lu-sheet{width:100%;max-width:380px;background:var(--panel);border:1px solid #4060ff;
+  border-radius:16px;padding:20px;text-align:center;}
+.lu-title{font-size:26px;font-weight:900;color:var(--amber);letter-spacing:.1em;margin-bottom:10px;}
+#luText{font-size:14px;line-height:1.7;white-space:pre-line;color:var(--ink);margin-bottom:16px;}
+
+/* Game over */
+#gameOver{position:fixed;inset:0;background:rgba(20,2,2,.95);z-index:40;
+  display:flex;align-items:center;justify-content:center;padding:24px;}
+#gameOver.hidden{display:none;}
+.go-sheet{width:100%;max-width:360px;background:#160404;border:1px solid #5a1010;
+  border-radius:16px;padding:24px;text-align:center;}
+.go-title{font-size:30px;font-weight:900;color:var(--red);margin-bottom:10px;}
+.go-sub{font-size:14px;color:#b08080;margin-bottom:20px;}
+
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .3s;z-index:60;}
+#boot{position:fixed;inset:0;z-index:70;background:#1a3a0a;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:12px;color:var(--dim);font-size:13px;letter-spacing:.2em;}
+#boot.hidden{display:none;}
+#boot .logo{font-size:28px;font-weight:900;color:var(--amber);letter-spacing:.1em;}
+#err{position:fixed;inset:0;z-index:99;background:#120606;color:#ffb0b8;padding:20px;
+  font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow:auto;}
+#err.hidden{display:none;}
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud">
+  <div class="hud-row">
+    <div class="chip" id="hudLvl">Lv1</div>
+    <div class="bar-wrap" style="max-width:130px">
+      <div class="bar-fill" id="hudHPBar"></div>
+      <div class="bar-label">HP <span id="hudHP">40/40</span></div>
+    </div>
+    <div class="bar-wrap" style="max-width:80px">
+      <div class="bar-fill" id="xpBar" style="background:linear-gradient(90deg,#3a2a80,#8060ff)"></div>
+      <div class="bar-label" style="font-size:8px">XP</div>
+    </div>
+    <div class="chip" id="hudGold">&#9672;0</div>
+  </div>
+  <div id="hudZone">&#9832; Hot Springs Village</div>
+</div>
+<div id="toast"></div>
+
+<div id="ctrl">
+  <div id="dpad">
+    <button class="dkey" id="dir-up">&#9650;</button>
+    <button class="dkey" id="dir-left">&#9664;</button>
+    <button class="dkey" id="dir-right">&#9654;</button>
+    <button class="dkey" id="dir-down">&#9660;</button>
+  </div>
+  <div id="actionBtns">
+    <button class="actBtn" id="interactBtn">Talk</button>
+  </div>
+</div>
+
+<div id="battle" class="hidden">
+  <div class="bt-box">
+    <div class="bt-name" id="btEnemyName">Enemy</div>
+    <div class="bt-hprow">
+      <div class="bt-bar"><div class="bt-bar-fill" id="btEnemyHPBar"></div></div>
+      <div class="bt-hp-text" id="btEnemyHP">-</div>
+    </div>
+  </div>
+  <div class="bt-box">
+    <div id="btLog">Battle starting...</div>
+    <div id="btActions"></div>
+  </div>
+  <div class="bt-box">
+    <div class="bt-name">Capy</div>
+    <div class="bt-hprow">
+      <div class="bt-bar"><div class="bt-bar-fill" id="btCapyHPBar"></div></div>
+      <div class="bt-hp-text" id="btCapyHP">-</div>
+    </div>
+  </div>
+</div>
+
+<div id="dialogBox" class="hidden">
+  <div class="dialog-sheet">
+    <div class="dialog-name">NPC</div>
+    <div id="dialogText"></div>
+    <button class="dialog-btn" id="dialogBtn">Continue</button>
+  </div>
+</div>
+
+<div id="shopModal" class="hidden">
+  <div class="shop-sheet">
+    <h2>Shop</h2>
+    <div class="shop-gold">Gold: <span id="shopGold">0</span></div>
+    <div id="shopList"></div>
+    <button class="wide-btn" id="shopClose">Close</button>
+  </div>
+</div>
+
+<div id="levelUp" class="hidden">
+  <div class="lu-sheet">
+    <div class="lu-title">LEVEL UP!</div>
+    <div id="luText"></div>
+    <button class="wide-btn" id="luClose">Continue</button>
+  </div>
+</div>
+
+<div id="gameOver" class="hidden">
+  <div class="go-sheet">
+    <div class="go-title">Knocked Out!</div>
+    <div class="go-sub">A passing capybara dragged you back to the hot springs.</div>
+    <button class="wide-btn" id="goRestart" style="border-color:#5a1010;color:var(--red)">Try Again</button>
+  </div>
+</div>
+
+<div id="flash"></div>
+<div id="boot"><div class="logo">CAPY QUEST</div><span>LOADING...</span></div>
+<div id="err" class="hidden"></div>
+
+<script>
+function showErr(m){
+  var e=document.getElementById('err'); e.classList.remove('hidden');
+  e.textContent+=m+'\n\n';
+  var b=document.getElementById('boot'); if(b)b.classList.add('hidden');
+}
+window.addEventListener('error',function(e){showErr('ERROR: '+(e.message||e)+'\n'+(e.filename||'')+':'+(e.lineno||''));});
+window.addEventListener('unhandledrejection',function(e){showErr('PROMISE: '+(e.reason&&e.reason.message?e.reason.message:e.reason));});
+</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.166.0/build/three.module.js"}}</script>
+<script type="module" src="./app.js"></script>
+<script>if('serviceWorker'in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){});});</script>
+</body>
+</html>
